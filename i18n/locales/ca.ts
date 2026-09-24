@@ -45,6 +45,26 @@ const ca = {
     pockets: "butxaques",
   },
 
+  userMenu: {
+    myDesigns: "Els meus dissenys",
+    profile: "Perfil",
+    accountSettings: "Configuració del compte",
+    language: "Idioma",
+    appearance: "Aparença",
+    light: "Clar",
+    dark: "Fosc",
+    signOut: "Tancar sessió",
+    signingOut: "Tancant sessió...",
+    openMenu: "Obrir el menú del compte",
+  },
+
+  publicProfile: {
+    designs: "Dissenys",
+    designsDescription: "Dissenys públics d'àlbum de",
+    noDesigns: "Encara no hi ha dissenys públics",
+    noDesignsDescription: "Els dissenys públics d'àlbum apareixeran aquí.",
+  },
+
   footer: {
     tagline: "Dissenya la teva col·lecció, pàgina a pàgina.",
     navigation: "Navegació del peu de pàgina",

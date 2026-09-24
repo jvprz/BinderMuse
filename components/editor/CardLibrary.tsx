@@ -391,7 +391,7 @@ export default function CardLibrary({
   }
 
   return (
-    <aside className="surface min-w-0 rounded-[24px] p-5 lg:max-h-[calc(100vh-104px)] lg:overflow-y-auto">
+    <aside className="surface h-full min-h-0 min-w-0 overflow-y-auto rounded-[24px] p-4 xl:p-5">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-tertiary)]">
           Cards

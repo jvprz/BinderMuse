@@ -10,10 +10,13 @@ import BinderCanvas from "@/components/editor/BinderCanvas";
 import CardLibrary from "@/components/editor/CardLibrary";
 import EditorSidebar from "@/components/editor/EditorSidebar";
 
+import { createClient } from "@/lib/supabase/client";
+
 import type {
   BinderCard,
   BinderLayout,
   BinderPocket,
+  BinderSpread,
   TcgGame,
 } from "@/types/binder";
 
@@ -38,18 +41,70 @@ const layouts: BinderLayout[] = [
   },
 ];
 
+type SaveStatus =
+  | "idle"
+  | "unsaved"
+  | "saving"
+  | "saved"
+  | "error";
+
+function getPocketCount(
+  layout: BinderLayout,
+  spread: BinderSpread,
+) {
+  return (
+    layout.columns *
+    layout.rows *
+    (spread === "double" ? 2 : 1)
+  );
+}
+
 function createPockets(
   layout: BinderLayout,
+  spread: BinderSpread,
 ): BinderPocket[] {
   return Array.from(
     {
-      length:
-        layout.columns * layout.rows,
+      length: getPocketCount(
+        layout,
+        spread,
+      ),
     },
     (_, index) => ({
       id: `pocket-${index + 1}`,
       content: null,
     }),
+  );
+}
+
+function resizePockets(
+  currentPockets: BinderPocket[],
+  layout: BinderLayout,
+  spread: BinderSpread,
+): BinderPocket[] {
+  const newPocketCount =
+    getPocketCount(layout, spread);
+
+  return Array.from(
+    {
+      length: newPocketCount,
+    },
+    (_, index) => {
+      const existingPocket =
+        currentPockets[index];
+
+      if (existingPocket) {
+        return {
+          ...existingPocket,
+          id: `pocket-${index + 1}`,
+        };
+      }
+
+      return {
+        id: `pocket-${index + 1}`,
+        content: null,
+      };
+    },
   );
 }
 
@@ -64,12 +119,18 @@ export default function EditorPage() {
     layouts[1],
   );
 
+  const [spread, setSpread] =
+    useState<BinderSpread>("single");
+
   const [pageColor, setPageColor] =
     useState("#ffffff");
 
   const [pockets, setPockets] =
     useState<BinderPocket[]>(() =>
-      createPockets(layouts[1]),
+      createPockets(
+        layouts[1],
+        "single",
+      ),
     );
 
   const [
@@ -90,6 +151,31 @@ export default function EditorPage() {
     recentCards,
     setRecentCards,
   ] = useState<BinderCard[]>([]);
+
+  const [
+    designId,
+    setDesignId,
+  ] = useState<string | null>(null);
+
+  const [
+    designName,
+    setDesignName,
+  ] = useState("Untitled design");
+
+  const [
+    isPublic,
+    setIsPublic,
+  ] = useState(false);
+
+  const [
+    saveStatus,
+    setSaveStatus,
+  ] = useState<SaveStatus>("idle");
+
+  const [
+    saveError,
+    setSaveError,
+  ] = useState<string | null>(null);
 
   const focusedCard = useMemo(() => {
     if (!selectedPocketId) {
@@ -117,6 +203,36 @@ export default function EditorPage() {
       setSelectedCard(null);
     }, []);
 
+  function markUnsaved() {
+    setSaveStatus("unsaved");
+    setSaveError(null);
+  }
+
+  function handleDesignNameChange(
+    value: string,
+  ) {
+    setDesignName(value);
+    markUnsaved();
+  }
+
+  function handleVisibilityChange(
+    value: boolean,
+  ) {
+    if (value === isPublic) {
+      return;
+    }
+
+    setIsPublic(value);
+    markUnsaved();
+  }
+
+  function handlePageColorChange(
+    color: string,
+  ) {
+    setPageColor(color);
+    markUnsaved();
+  }
+
   function handleGameChange(
     newGame: TcgGame,
   ) {
@@ -130,8 +246,13 @@ export default function EditorPage() {
     setRecentCards([]);
 
     setPockets(
-      createPockets(selectedLayout),
+      createPockets(
+        selectedLayout,
+        spread,
+      ),
     );
+
+    markUnsaved();
   }
 
   function handleLayoutChange(
@@ -148,33 +269,37 @@ export default function EditorPage() {
     setSelectedCard(null);
     setSelectedPocketId(null);
 
-    setPockets((currentPockets) => {
-      const newPocketCount =
-        newLayout.columns *
-        newLayout.rows;
+    setPockets((currentPockets) =>
+      resizePockets(
+        currentPockets,
+        newLayout,
+        spread,
+      ),
+    );
 
-      return Array.from(
-        {
-          length: newPocketCount,
-        },
-        (_, index) => {
-          const existingPocket =
-            currentPockets[index];
+    markUnsaved();
+  }
 
-          if (existingPocket) {
-            return {
-              ...existingPocket,
-              id: `pocket-${index + 1}`,
-            };
-          }
+  function handleSpreadChange(
+    newSpread: BinderSpread,
+  ) {
+    if (newSpread === spread) {
+      return;
+    }
 
-          return {
-            id: `pocket-${index + 1}`,
-            content: null,
-          };
-        },
-      );
-    });
+    setSpread(newSpread);
+    setSelectedCard(null);
+    setSelectedPocketId(null);
+
+    setPockets((currentPockets) =>
+      resizePockets(
+        currentPockets,
+        selectedLayout,
+        newSpread,
+      ),
+    );
+
+    markUnsaved();
   }
 
   function handleSelectCard(
@@ -202,11 +327,6 @@ export default function EditorPage() {
       return;
     }
 
-    /*
-     * Un pocket ocupado siempre se selecciona.
-     * Nunca sustituimos una carta existente
-     * mediante un simple clic.
-     */
     if (pocket.content) {
       setSelectedPocketId(
         (current) =>
@@ -218,11 +338,6 @@ export default function EditorPage() {
       return;
     }
 
-    /*
-     * Si está vacío y tenemos una carta
-     * seleccionada en la biblioteca,
-     * la colocamos.
-     */
     if (selectedCard) {
       placeCard(
         selectedCard,
@@ -278,19 +393,10 @@ export default function EditorPage() {
 
     addRecentCard(card);
 
-    /*
-     * Mantenemos la carta seleccionada.
-     * Así el usuario puede colocar varias
-     * copias rápidamente.
-     */
     setSelectedCard(card);
-
-    /*
-     * No enfocamos automáticamente el pocket
-     * al colocar una carta. El modo actual
-     * sigue siendo "colocar esta carta".
-     */
     setSelectedPocketId(null);
+
+    markUnsaved();
   }
 
   function handlePocketMove(
@@ -368,6 +474,8 @@ export default function EditorPage() {
     setSelectedPocketId(
       targetPocketId,
     );
+
+    markUnsaved();
   }
 
   function handleDuplicateCard(
@@ -425,15 +533,12 @@ export default function EditorPage() {
 
     addRecentCard(card);
 
-    /*
-     * Dejamos enfocada la nueva copia,
-     * para que el usuario vea claramente
-     * dónde ha aparecido.
-     */
     setSelectedCard(null);
     setSelectedPocketId(
       emptyPocket.id,
     );
+
+    markUnsaved();
   }
 
   function handleRemoveCard(
@@ -458,6 +563,8 @@ export default function EditorPage() {
     );
 
     setSelectedPocketId(null);
+
+    markUnsaved();
   }
 
   function addRecentCard(
@@ -480,64 +587,342 @@ export default function EditorPage() {
     );
   }
 
-  return (
-    <main className="min-h-[calc(100vh-56px)] bg-[var(--background)]">
-      <div className="mx-auto grid max-w-[1800px] grid-cols-1 gap-4 p-4 sm:p-6 lg:grid-cols-[250px_minmax(0,1fr)_300px] xl:grid-cols-[270px_minmax(0,1fr)_340px]">
-        <EditorSidebar
-          game={game}
-          onGameChange={
-            handleGameChange
-          }
-          layouts={layouts}
-          selectedLayout={
-            selectedLayout
-          }
-          onLayoutChange={
-            handleLayoutChange
-          }
-          pageColor={pageColor}
-          onPageColorChange={
-            setPageColor
-          }
-        />
+  async function handleSave() {
+    if (saveStatus === "saving") {
+      return;
+    }
 
-        <BinderCanvas
-          layout={selectedLayout}
-          pageColor={pageColor}
-          pockets={pockets}
-          selectedCard={selectedCard}
-          selectedPocketId={
-            selectedPocketId
-          }
-          focusedCard={focusedCard}
-          onPocketClick={
-            handlePocketClick
-          }
-          onCardDrop={
-            handleCardDrop
-          }
-          onPocketMove={
-            handlePocketMove
-          }
-          onDuplicateCard={
-            handleDuplicateCard
-          }
-          onRemoveCard={
-            handleRemoveCard
-          }
-          onClearSelectedCard={
-            handleClearSelectedCard
-          }
-        />
-        <CardLibrary
-          game={game}
-          selectedCard={selectedCard}
-          focusedCard={focusedCard}
-          recentCards={recentCards}
-          onSelectCard={
-            handleSelectCard
-          }
-        />
+    const trimmedName =
+      designName.trim();
+
+    if (!trimmedName) {
+      setSaveStatus("error");
+      setSaveError(
+        "Give your design a name before saving.",
+      );
+      return;
+    }
+
+    setSaveStatus("saving");
+    setSaveError(null);
+
+    const supabase =
+      createClient();
+
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      setSaveStatus("error");
+      setSaveError(
+        "You need to sign in before saving a design.",
+      );
+      return;
+    }
+
+    const now =
+      new Date().toISOString();
+
+    const content = pockets.map(
+      (pocket) => pocket.content,
+    );
+
+    const designData = {
+      user_id: user.id,
+      name: trimmedName,
+      game,
+      rows: selectedLayout.rows,
+      columns:
+        selectedLayout.columns,
+      spread,
+      page_color: pageColor,
+      content,
+      is_public: isPublic,
+      updated_at: now,
+    };
+
+    if (designId) {
+      const { error } =
+        await supabase
+          .from("designs")
+          .update(designData)
+          .eq("id", designId)
+          .eq("user_id", user.id);
+
+      if (error) {
+        console.error(
+          "Error updating design:",
+          error,
+        );
+
+        setSaveStatus("error");
+        setSaveError(
+          "We couldn't save your changes. Please try again.",
+        );
+        return;
+      }
+
+      setDesignName(trimmedName);
+      setSaveStatus("saved");
+      return;
+    }
+
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("designs")
+      .insert(designData)
+      .select("id")
+      .single();
+
+    if (error || !data) {
+      console.error(
+        "Error creating design:",
+        error,
+      );
+
+      setSaveStatus("error");
+      setSaveError(
+        "We couldn't save your design. Please try again.",
+      );
+      return;
+    }
+
+    setDesignId(data.id);
+    setDesignName(trimmedName);
+    setSaveStatus("saved");
+  }
+
+  function getSaveStatusLabel() {
+    switch (saveStatus) {
+      case "saving":
+        return "Saving…";
+
+      case "saved":
+        return "Saved";
+
+      case "unsaved":
+        return "Unsaved changes";
+
+      case "error":
+        return "Save failed";
+
+      default:
+        return "Not saved yet";
+    }
+  }
+
+  return (
+    <main className="h-[calc(100dvh-56px)] overflow-hidden bg-[var(--background)]">
+      <div className="mx-auto flex h-full max-w-[1800px] flex-col p-3 sm:p-4">
+        <div className="mb-3 flex shrink-0 items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="group relative w-full max-w-[360px]">
+            <input
+              type="text"
+              value={designName}
+              onChange={(event) =>
+                handleDesignNameChange(
+                  event.target.value,
+                )
+              }
+              maxLength={80}
+              aria-label="Design name"
+              className="w-full truncate rounded-lg border border-transparent bg-transparent py-1.5 pl-2 pr-9 text-sm font-semibold tracking-[-0.01em] text-[var(--text-primary)] outline-none transition hover:bg-[var(--control-hover)] focus:border-[var(--border)] focus:bg-[var(--surface)]"
+            />
+
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+              className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--text-tertiary)] opacity-60 transition group-hover:opacity-100 group-focus-within:opacity-100"
+            >
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L8 18l-4 1 1-4Z" />
+            </svg>
+          </div>
+
+            {saveError && (
+              <p className="mt-1 px-2 text-xs text-[#ff3b30]">
+                {saveError}
+              </p>
+            )}
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+            <div
+              className="flex h-9 items-center rounded-full border border-[var(--border)] bg-[var(--surface)] p-1"
+              aria-label="Design visibility"
+            >
+              <button
+                type="button"
+                onClick={() =>
+                  handleVisibilityChange(
+                    false,
+                  )
+                }
+                aria-pressed={!isPublic}
+                title="Only you can see this design"
+                className={`flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium transition ${
+                  !isPublic
+                    ? "bg-[var(--text-primary)] text-[var(--background)] shadow-sm"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--control-hover)]"
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className="text-[11px]"
+                >
+                  ●
+                </span>
+                <span className="hidden sm:inline">
+                  Private
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  handleVisibilityChange(
+                    true,
+                  )
+                }
+                aria-pressed={isPublic}
+                title="Anyone can view this design"
+                className={`flex h-7 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium transition ${
+                  isPublic
+                    ? "bg-[var(--text-primary)] text-[var(--background)] shadow-sm"
+                    : "text-[var(--text-secondary)] hover:bg-[var(--control-hover)]"
+                }`}
+              >
+                <span
+                  aria-hidden="true"
+                  className="text-[11px]"
+                >
+                  ◉
+                </span>
+                <span className="hidden sm:inline">
+                  Public
+                </span>
+              </button>
+            </div>
+
+            <span
+              className={`hidden text-xs md:inline ${
+                saveStatus === "error"
+                  ? "text-[#ff3b30]"
+                  : saveStatus ===
+                      "saved"
+                    ? "text-[var(--text-secondary)]"
+                    : "text-[var(--text-tertiary)]"
+              }`}
+            >
+              {getSaveStatusLabel()}
+            </span>
+
+            <button
+              type="button"
+              onClick={() => {
+                void handleSave();
+              }}
+              disabled={
+                saveStatus === "saving"
+              }
+              className="h-9 rounded-full bg-[var(--text-primary)] px-4 text-sm font-medium text-[var(--background)] transition hover:opacity-85 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saveStatus === "saving"
+                ? "Saving…"
+                : "Save"}
+            </button>
+          </div>
+        </div>
+
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-[220px_minmax(0,1fr)_260px] xl:grid-cols-[240px_minmax(0,1fr)_290px] 2xl:grid-cols-[260px_minmax(0,1fr)_320px]">
+          <div className="min-h-0">
+            <EditorSidebar
+              game={game}
+              onGameChange={
+                handleGameChange
+              }
+              layouts={layouts}
+              selectedLayout={
+                selectedLayout
+              }
+              onLayoutChange={
+                handleLayoutChange
+              }
+              spread={spread}
+              onSpreadChange={
+                handleSpreadChange
+              }
+              pageColor={pageColor}
+              onPageColorChange={
+                handlePageColorChange
+              }
+            />
+          </div>
+
+          <div className="min-h-0 min-w-0">
+            <BinderCanvas
+              layout={selectedLayout}
+              spread={spread}
+              pageColor={pageColor}
+              pockets={pockets}
+              selectedCard={
+                selectedCard
+              }
+              selectedPocketId={
+                selectedPocketId
+              }
+              focusedCard={
+                focusedCard
+              }
+              onPocketClick={
+                handlePocketClick
+              }
+              onCardDrop={
+                handleCardDrop
+              }
+              onPocketMove={
+                handlePocketMove
+              }
+              onDuplicateCard={
+                handleDuplicateCard
+              }
+              onRemoveCard={
+                handleRemoveCard
+              }
+              onClearSelectedCard={
+                handleClearSelectedCard
+              }
+            />
+          </div>
+
+          <div className="min-h-0">
+            <CardLibrary
+              game={game}
+              selectedCard={
+                selectedCard
+              }
+              focusedCard={
+                focusedCard
+              }
+              recentCards={
+                recentCards
+              }
+              onSelectCard={
+                handleSelectCard
+              }
+            />
+          </div>
+        </div>
       </div>
     </main>
   );

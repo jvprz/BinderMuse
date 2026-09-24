@@ -45,6 +45,26 @@ const en = {
     pockets: "pockets",
   },
 
+  userMenu: {
+    myDesigns: "My designs",
+    profile: "Profile",
+    accountSettings: "Account settings",
+    language: "Language",
+    appearance: "Appearance",
+    light: "Light",
+    dark: "Dark",
+    signOut: "Sign out",
+    signingOut: "Signing out...",
+    openMenu: "Open account menu",
+  },
+
+  publicProfile: {
+    designs: "Designs",
+    designsDescription: "Public binder designs by",
+    noDesigns: "No public designs yet",
+    noDesignsDescription: "Public binder designs will appear here.",
+  },
+
   footer: {
     tagline: "Design your collection, one page at a time.",
     navigation: "Footer navigation",

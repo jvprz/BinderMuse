@@ -45,6 +45,26 @@ const es = {
     pockets: "bolsillos",
   },
 
+  userMenu: {
+    myDesigns: "Mis diseños",
+    profile: "Perfil",
+    accountSettings: "Configuración de la cuenta",
+    language: "Idioma",
+    appearance: "Apariencia",
+    light: "Claro",
+    dark: "Oscuro",
+    signOut: "Cerrar sesión",
+    signingOut: "Cerrando sesión...",
+    openMenu: "Abrir menú de cuenta",
+  },
+
+  publicProfile: {
+    designs: "Diseños",
+    designsDescription: "Diseños públicos de binder de",
+    noDesigns: "Todavía no hay diseños públicos",
+    noDesignsDescription: "Los diseños públicos de binder aparecerán aquí.",
+  },
+
   footer: {
     tagline: "Diseña tu colección, página a página.",
     navigation: "Navegación del pie de página",

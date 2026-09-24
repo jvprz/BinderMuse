@@ -1,4 +1,10 @@
-export type TcgGame = "pokemon" | "cyberpunk";
+export type TcgGame =
+  | "pokemon"
+  | "cyberpunk";
+
+export type BinderSpread =
+  | "single"
+  | "double";
 
 export type BinderLayout = {
   id: string;
@@ -15,13 +21,10 @@ export type CardSet = {
 export type BinderCard = {
   id: string;
   game: TcgGame;
-
   name: string;
   number?: string;
   rarity?: string;
-
   set?: CardSet;
-
   images: {
     small: string;
     large: string;
@@ -51,6 +54,7 @@ export type BinderPocket = {
 export type BinderPage = {
   game: TcgGame;
   layout: BinderLayout;
+  spread: BinderSpread;
   pageColor: string;
   pockets: BinderPocket[];
 };
